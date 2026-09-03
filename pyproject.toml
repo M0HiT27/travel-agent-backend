@@ -1,0 +1,30 @@
+[project]
+name = "travel-agent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Mohit Raghuwanshi", email = "raghuwanshimohit1@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "alembic>=1.19.1",
+    "bcrypt>=5.0.0",
+    "fastapi[standard]>=0.141.1",
+    "psycopg[binary]>=3.3.5",
+    "pydantic-settings>=2.15.0",
+    "python-dotenv>=1.2.3",
+    "sqlalchemy>=2.0",
+    "starlette>=1.6.0",
+    "uvicorn[standard]>=0.52.4",
+]
+
+[project.scripts]
+travel-agent = "app:main"
+
+[tool.uv.build-backend]
+module-name = "app"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
