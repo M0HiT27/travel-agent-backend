@@ -15,6 +15,8 @@ anyio==4.15.0
     #   httpx
     #   starlette
     #   watchfiles
+bcrypt==5.0.0
+    # via travel-agent
 certifi==2026.7.22
     # via
     #   httpcore
@@ -95,6 +97,8 @@ pydantic-settings==2.15.0
     #   travel-agent
 pygments==2.21.0
     # via rich
+pyjwt==2.13.0
+    # via travel-agent
 python-dotenv==1.2.3
     # via
     #   pydantic-settings

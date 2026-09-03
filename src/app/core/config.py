@@ -15,6 +15,14 @@ class Settings(BaseSettings):
     postgres_port: int = 5432
     postgres_db: str = "travel_agent"
 
+    jwt_secret_key: str
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60 * 24
+
+    cookie_name: str = "access_token"
+    cookie_secure: bool = False
+    cookie_samesite: str = "lax"
+
     @property
     def database_url(self) -> str:
         return (
