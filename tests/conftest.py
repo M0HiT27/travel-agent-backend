@@ -14,6 +14,13 @@ def future_date() -> str:
 
 
 @pytest.fixture
+def future_dates() -> tuple[str, str]:
+    """A valid future check-in / check-out pair."""
+    start = date.today() + timedelta(days=30)
+    return start.isoformat(), (start + timedelta(days=3)).isoformat()
+
+
+@pytest.fixture
 def client() -> TestClient:
     """A test client with a stub logged-in user.
 
