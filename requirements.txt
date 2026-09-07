@@ -60,6 +60,7 @@ httpx==0.28.1
     # via
     #   fastapi
     #   fastapi-cloud-cli
+    #   travel-agent
 idna==3.19
     # via
     #   anyio

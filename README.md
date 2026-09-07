@@ -24,8 +24,11 @@ src/app/
   models/                            # SQLAlchemy models (import them in models/__init__.py)
   schemas/                            # Pydantic request/response models
   api/deps.py                          # get_current_user (reads JWT from cookie)
-  api/routes/                           # API routers (health, auth)
-alembic/                                 # migrations (env.py wired to Settings + Base.metadata)
+  api/routes/                           # API routers (health, auth, flights, hotels)
+  services/flight_service.py             # Duffel flight search: build -> call -> map
+  services/hotel_service.py               # parse.bot hotel search: resolve -> build -> call -> map
+alembic/                                  # migrations (env.py wired to Settings + Base.metadata)
+tests/                                     # pytest suite (no network or DB required)
 ```
 
 ## Setup
@@ -62,7 +65,74 @@ uv run fastapi dev src/app/main.py
 
 The JWT is signed server-side and set as an `httponly` cookie (`COOKIE_NAME` in `.env`) — it's never exposed to client-side JS. Errors are returned as consistent JSON (`{"detail": "..."}`); unhandled server errors are logged but never leak internals to the client.
 
+### Flights
+
+- `POST /flights/search` — `{origin, destination, departure_date, adults?}` → offers sorted cheapest first. Requires the auth cookie, since every search costs money against the Duffel account.
+
+```bash
+curl -X POST http://127.0.0.1:8000/flights/search \
+  -H 'Content-Type: application/json' \
+  -b 'access_token=<your cookie>' \
+  -d '{"origin": "DEL", "destination": "GOI", "departure_date": "2026-09-15"}'
+```
+
+Origin and destination are 3-letter IATA codes (case-insensitive); past dates and identical
+origin/destination are rejected before Duffel is called. `total_amount` serialises as a JSON
+**string** because it is a `Decimal` — money must not round-trip through a float.
+
+Set `DUFFEL_API_KEY` in `.env` (use a `duffel_test_` key while developing — live keys book
+real flights). Duffel failures surface as `502`, timeouts as `504`; the API key and the raw
+upstream response are never logged or returned to the client.
+
+Search lives in `services/flight_service.py` as a plain `search_flights(settings, request)`
+function, so it can be called directly from a future LangGraph/LangChain tool rather than
+through an HTTP round-trip back into this API. It reads in three steps: build the request
+body, call Duffel, map the response.
+
+### Hotels
+
+- `POST /hotels/search` — `{destination, start_date, end_date, rooms?, adults?}` → up to 20 hotels in the source's recommended order. Requires the auth cookie, since every search costs money against the parse.bot account.
+
+```bash
+curl -X POST http://127.0.0.1:8000/hotels/search \
+  -H 'Content-Type: application/json' \
+  -b 'access_token=<your cookie>' \
+  -d '{"destination": "Paris", "start_date": "2026-10-15", "end_date": "2026-10-18"}'
+```
+
+The client sends a destination **name**, not a region id — resolving the name is the
+API's job. Because "Paris" also matches Paris, Texas, the response echoes back the
+`destination` and `region_id` it actually used, so a wrong guess is visible rather than
+silent. Resolution prefers a `CITY` suggestion over the neighbourhoods, airports and
+landmarks that autocomplete also returns, and is cached in-process so repeat searches
+for the same place cost one upstream call instead of two.
+
+Check-in cannot be in the past, check-out must be after check-in, and stays are capped
+at 30 nights — all rejected as `422` before parse.bot is called. Prices serialise as
+JSON **strings** (`"1661"`) because they are `Decimal`s, and are nullable: the scraper
+returns display text like `"$1,661 total"`, and a listing whose price will not parse is
+still returned with its name, rating and booking link. Currency comes from the booking
+URL rather than the `$`, which could be USD, CAD or AUD.
+
+Set `PARSEBOT_API_KEY` in `.env`. Upstream failures surface as `502` and timeouts as
+`504`; a destination that cannot be resolved is a `404`. The API key and the raw
+upstream response are never logged or returned to the client.
+
+Like flights, search lives in `services/hotel_service.py` as a plain
+`search_hotels(settings, request)` function, callable directly from a future
+LangGraph/LangChain tool. It reads in four steps: resolve the destination, build the
+query, call parse.bot, map the response.
+
 > On Windows, if `fastapi dev` crashes with a `UnicodeEncodeError` from an emoji in its startup banner, set `PYTHONUTF8=1` in your environment (PowerShell: `$env:PYTHONUTF8 = "1"`).
+
+## Tests
+
+```bash
+uv run pytest
+```
+
+No network, API key, or database is needed: route tests stub out `search_flights`, and the
+Duffel mapping is tested against a recorded response payload.
 
 ## Migrations
 
