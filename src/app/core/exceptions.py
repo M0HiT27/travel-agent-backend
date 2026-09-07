@@ -25,3 +25,16 @@ class UnauthorizedError(AppError):
 class ForbiddenError(AppError):
     def __init__(self, message: str = "Not authorized") -> None:
         super().__init__(message, status_code=403)
+
+
+class UpstreamError(AppError):
+    """A third-party service we depend on failed. Our fault only in the sense that we
+    chose to depend on it, so 502 rather than 500."""
+
+    def __init__(self, message: str = "Upstream service error") -> None:
+        super().__init__(message, status_code=502)
+
+
+class UpstreamTimeoutError(AppError):
+    def __init__(self, message: str = "Upstream service timed out") -> None:
+        super().__init__(message, status_code=504)
