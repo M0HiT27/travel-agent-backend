@@ -24,8 +24,10 @@ src/app/
   models/                            # SQLAlchemy models (import them in models/__init__.py)
   schemas/                            # Pydantic request/response models
   api/deps.py                          # get_current_user (reads JWT from cookie)
-  api/routes/                           # API routers (health, auth)
-alembic/                                 # migrations (env.py wired to Settings + Base.metadata)
+  api/routes/                           # API routers (health, auth, flights)
+  services/flight_service.py             # Duffel flight search: build -> call -> map
+alembic/                                  # migrations (env.py wired to Settings + Base.metadata)
+tests/                                     # pytest suite (no network or DB required)
 ```
 
 ## Setup
@@ -62,7 +64,40 @@ uv run fastapi dev src/app/main.py
 
 The JWT is signed server-side and set as an `httponly` cookie (`COOKIE_NAME` in `.env`) — it's never exposed to client-side JS. Errors are returned as consistent JSON (`{"detail": "..."}`); unhandled server errors are logged but never leak internals to the client.
 
+### Flights
+
+- `POST /flights/search` — `{origin, destination, departure_date, adults?}` → offers sorted cheapest first. Requires the auth cookie, since every search costs money against the Duffel account.
+
+```bash
+curl -X POST http://127.0.0.1:8000/flights/search \
+  -H 'Content-Type: application/json' \
+  -b 'access_token=<your cookie>' \
+  -d '{"origin": "DEL", "destination": "GOI", "departure_date": "2026-09-15"}'
+```
+
+Origin and destination are 3-letter IATA codes (case-insensitive); past dates and identical
+origin/destination are rejected before Duffel is called. `total_amount` serialises as a JSON
+**string** because it is a `Decimal` — money must not round-trip through a float.
+
+Set `DUFFEL_API_KEY` in `.env` (use a `duffel_test_` key while developing — live keys book
+real flights). Duffel failures surface as `502`, timeouts as `504`; the API key and the raw
+upstream response are never logged or returned to the client.
+
+Search lives in `services/flight_service.py` as a plain `search_flights(settings, request)`
+function, so it can be called directly from a future LangGraph/LangChain tool rather than
+through an HTTP round-trip back into this API. It reads in three steps: build the request
+body, call Duffel, map the response.
+
 > On Windows, if `fastapi dev` crashes with a `UnicodeEncodeError` from an emoji in its startup banner, set `PYTHONUTF8=1` in your environment (PowerShell: `$env:PYTHONUTF8 = "1"`).
+
+## Tests
+
+```bash
+uv run pytest
+```
+
+No network, API key, or database is needed: route tests stub out `search_flights`, and the
+Duffel mapping is tested against a recorded response payload.
 
 ## Migrations
 
