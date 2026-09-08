@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     parsebot_hotel_scraper_id: str
     parsebot_timeout_seconds: float = 60.0
 
+    # parse.bot redbus.com scraper. This is a separate scraper from the hotel one.
+    parsebot_redbus_scraper_id: str
+
     @property
     def database_url(self) -> str:
         return (
