@@ -24,9 +24,11 @@ src/app/
   models/                            # SQLAlchemy models (import them in models/__init__.py)
   schemas/                            # Pydantic request/response models
   api/deps.py                          # get_current_user (reads JWT from cookie)
-  api/routes/                           # API routers (health, auth, flights, hotels)
+  api/routes/                           # API routers (health, auth, flights, hotels, buses)
   services/flight_service.py             # Duffel flight search: build -> call -> map
   services/hotel_service.py               # parse.bot hotel search: resolve -> build -> call -> map
+  services/bus_service.py                  # parse.bot bus search: resolve -> build -> call -> map
+  services/_parsebot.py                     # shared parse.bot HTTP client (hotels + buses)
 alembic/                                  # migrations (env.py wired to Settings + Base.metadata)
 tests/                                     # pytest suite (no network or DB required)
 ```
@@ -122,6 +124,38 @@ Like flights, search lives in `services/hotel_service.py` as a plain
 `search_hotels(settings, request)` function, callable directly from a future
 LangGraph/LangChain tool. It reads in four steps: resolve the destination, build the
 query, call parse.bot, map the response.
+
+### Buses
+
+- `POST /buses/search` — `{origin, destination, departure_date}` → buses in the source's own order. Requires the auth cookie, since every search costs money against the parse.bot account.
+
+```bash
+curl -X POST http://127.0.0.1:8000/buses/search \
+  -H 'Content-Type: application/json' \
+  -b 'access_token=<your cookie>' \
+  -d '{"origin": "Mumbai", "destination": "Pune", "departure_date": "2026-09-15"}'
+```
+
+Same shape as hotels: the client sends city **names**, not the numeric ids the
+redbus scraper expects, and resolving them is the API's job. The response echoes
+back the resolved name and id for each city, so a wrong guess (there's more than one
+"Springfield") is visible rather than silent. `fare` is a `Decimal` and serialises as
+a JSON **string**; it is the lowest fare across seat classes when the source lists
+more than one. `departure_time`/`arrival_time` are naive local datetimes (redBus does
+not send a timezone, so none is invented). Past dates and identical
+origin/destination are rejected as `422` before parse.bot is called.
+
+Set `PARSEBOT_REDBUS_SCRAPER_ID` and `PARSEBOT_API_KEY` in `.env` (the same key used
+for hotels; buses is a separate scraper on the same account). Upstream failures
+surface as `502` and timeouts as `504`; a city that cannot be resolved is a `404`.
+
+Search lives in `services/bus_service.py`, structured exactly like
+`hotel_service.py` (`resolve -> build -> call -> map`), and shares its parse.bot HTTP
+plumbing via `services/_parsebot.py` rather than duplicating it a second time. Field
+names in `_map_bus`/`_pick_city` are verified against a real recorded response, like
+flights and hotels (`test_bus_service.py`'s payloads are trimmed copies of it) —
+notably, both `get_city_suggestions` and `search_buses` wrap their payload in a `data`
+envelope, and `ID`/`routeId`/`operatorId` arrive as integers, not strings.
 
 > On Windows, if `fastapi dev` crashes with a `UnicodeEncodeError` from an emoji in its startup banner, set `PYTHONUTF8=1` in your environment (PowerShell: `$env:PYTHONUTF8 = "1"`).
 
