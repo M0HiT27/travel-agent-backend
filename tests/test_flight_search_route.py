@@ -60,8 +60,8 @@ def stub_search(monkeypatch):
 
 def test_search_returns_offers(client, stub_search, future_date):
     response = client.post(
-        "/flights/search",
-        json={"origin": "DEL", "destination": "GOI", "departure_date": future_date},
+    "/flights/search",
+    json={"origin": "DEL", "destination": "GOI", "departure_date": future_date},
     )
 
     assert response.status_code == 200
@@ -75,8 +75,8 @@ def test_search_returns_offers(client, stub_search, future_date):
 
 def test_lowercase_iata_codes_are_normalised(client, stub_search, future_date):
     response = client.post(
-        "/flights/search",
-        json={"origin": "del", "destination": " goi ", "departure_date": future_date},
+    "/flights/search",
+    json={"origin": "del", "destination": " goi ", "departure_date": future_date},
     )
 
     assert response.status_code == 200
@@ -97,8 +97,8 @@ def test_adults_default_to_one(client, stub_search, future_date):
 def test_past_departure_date_is_rejected(client, stub_search):
     yesterday = (date.today() - timedelta(days=1)).isoformat()
     response = client.post(
-        "/flights/search",
-        json={"origin": "DEL", "destination": "GOI", "departure_date": yesterday},
+    "/flights/search",
+    json={"origin": "DEL", "destination": "GOI", "departure_date": yesterday},
     )
 
     assert response.status_code == 422
@@ -107,8 +107,8 @@ def test_past_departure_date_is_rejected(client, stub_search):
 
 def test_identical_origin_and_destination_is_rejected(client, stub_search, future_date):
     response = client.post(
-        "/flights/search",
-        json={"origin": "DEL", "destination": "DEL", "departure_date": future_date},
+    "/flights/search",
+    json={"origin": "DEL", "destination": "DEL", "departure_date": future_date},
     )
 
     assert response.status_code == 422
@@ -117,8 +117,8 @@ def test_identical_origin_and_destination_is_rejected(client, stub_search, futur
 
 def test_invalid_iata_code_is_rejected(client, stub_search, future_date):
     response = client.post(
-        "/flights/search",
-        json={"origin": "DELHI", "destination": "GOI", "departure_date": future_date},
+    "/flights/search",
+    json={"origin": "DELHI", "destination": "GOI", "departure_date": future_date},
     )
 
     assert response.status_code == 422
@@ -127,31 +127,30 @@ def test_invalid_iata_code_is_rejected(client, stub_search, future_date):
 
 def test_adults_outside_supported_range_is_rejected(client, stub_search, future_date):
     response = client.post(
-        "/flights/search",
-        json={
-            "origin": "DEL",
-            "destination": "GOI",
-            "departure_date": future_date,
-            "adults": 0,
-        },
+    "/flights/search",
+    json={
+        "origin": "DEL",
+        "destination": "GOI",
+        "departure_date": future_date,
+        "adults": 0,
+    },
     )
 
     assert response.status_code == 422
     assert stub_search == []
 
 
-def test_search_requires_authentication(stub_search, future_date):
+def test_search_requires_authentication(client, stub_search, future_date):
     """Without the auth override, the endpoint must reject the request."""
-    from fastapi.testclient import TestClient
-
+    from app.api.deps import get_current_user
     from app.main import app
 
-    app.dependency_overrides.clear()
-    with TestClient(app) as anonymous_client:
-        response = anonymous_client.post(
-            "/flights/search",
-            json={"origin": "DEL", "destination": "GOI", "departure_date": future_date},
-        )
+    app.dependency_overrides.pop(get_current_user)
+
+    response = client.post(
+        "/flights/search",
+        json={"origin": "DEL", "destination": "GOI", "departure_date": future_date},
+    )
 
     assert response.status_code == 401
     assert stub_search == []

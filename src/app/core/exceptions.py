@@ -38,3 +38,11 @@ class UpstreamError(AppError):
 class UpstreamTimeoutError(AppError):
     def __init__(self, message: str = "Upstream service timed out") -> None:
         super().__init__(message, status_code=504)
+
+
+class RateLimitedError(AppError):
+    """We hit a third party's rate limit. Distinct from a generic upstream failure so
+    the caller knows to retry rather than treating it as broken."""
+
+    def __init__(self, message: str = "Rate limit reached. Please try again shortly.") -> None:
+        super().__init__(message, status_code=429)

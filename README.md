@@ -27,6 +27,11 @@ src/app/
   api/routes/                           # API routers (health, auth, flights, hotels, buses)
   services/flight_service.py             # Duffel flight search: build -> call -> map
   services/hotel_service.py               # parse.bot hotel search: resolve -> build -> call -> map
+  ai/vector_store.py                       # Gemini embeddings + pgvector store
+  ai/tools.py                               # the tools the agent may call
+  ai/graph.py                                # the LangGraph agent
+data/policies/                                # PDFs to ingest
+scripts/ingest_documents.py                    # one-off: PDFs -> chunks -> embeddings -> DB
   services/bus_service.py                  # parse.bot bus search: resolve -> build -> call -> map
   services/_parsebot.py                     # shared parse.bot HTTP client (hotels + buses)
 alembic/                                  # migrations (env.py wired to Settings + Base.metadata)
@@ -53,6 +58,13 @@ uv run fastapi dev src/app/main.py
 ```
 
 (`uv run uvicorn app.main:app --reload` also works.)
+
+> **On Windows, `--reload` is not optional.** The agent's conversation memory uses an
+> async Postgres connection, and psycopg refuses to run on Windows' default
+> `ProactorEventLoop`. Uvicorn only selects the compatible `SelectorEventLoop` when it
+> runs the app in a subprocess — which `--reload` (or `--workers`) does. Plain
+> `uvicorn app.main:app` with neither will fail at startup with a `PoolTimeout`.
+> Not an issue on Linux or macOS.
 
 - `GET /health` — liveness check
 - `GET /health/db` — checks DB connectivity
@@ -156,6 +168,65 @@ names in `_map_bus`/`_pick_city` are verified against a real recorded response, 
 flights and hotels (`test_bus_service.py`'s payloads are trimmed copies of it) —
 notably, both `get_city_suggestions` and `search_buses` wrap their payload in a `data`
 envelope, and `ID`/`routeId`/`operatorId` arrive as integers, not strings.
+
+### Assistant (RAG + agent)
+
+- `POST /chat/ask` — `{question, conversation_id?}` → `{answer, conversation_id}`. Requires the auth cookie.
+
+```bash
+# First message: omit conversation_id, and keep the one you get back.
+curl -X POST http://127.0.0.1:8000/chat/ask \
+  -H 'Content-Type: application/json' -b 'access_token=<your cookie>' \
+  -d '{"question": "If I cancel 30 hours before departure, what fee do I pay?"}'
+# → {"answer": "20% of the ticket fare...", "conversation_id": "e4c5e7f0-..."}
+
+# Follow-up: send that id back, and context carries over.
+curl -X POST http://127.0.0.1:8000/chat/ask \
+  -H 'Content-Type: application/json' -b 'access_token=<your cookie>' \
+  -d '{"question": "And what about 20 hours?", "conversation_id": "e4c5e7f0-..."}'
+# → {"answer": "50% of the ticket fare...", ...}
+```
+
+**Conversation memory.** History is stored in Postgres by LangGraph's checkpointer, so it
+survives restarts. Omit `conversation_id` to start fresh; send it back to continue.
+Separate ids never see each other's messages.
+
+To keep a long chat from getting steadily more expensive, `ai/history.py` trims what is
+sent to the model: the last few turns are kept, but bulky tool results (retrieved policy
+chunks, flight listings) are carried only for the newest turn — stale chunks cannot help
+answer the next question. **Trimming affects what is sent, not what is stored**, so the
+full conversation is still in the database for a UI to display.
+
+A LangGraph agent (Gemini) picks its own tool per question — there is no routing
+`if/else` in the codebase:
+
+- `search_travel_policies` — semantic search over the ingested PDFs (RAG)
+- `search_flight_offers` — calls `search_flights()` directly, no HTTP round-trip
+
+Ask *"flights from Delhi to Goa on 2026-09-28"* and it converts the city names to IATA
+codes and searches. Ask about cancellation fees and it quotes the policy. Ask about
+something the documents do not cover and it says so rather than inventing an answer.
+
+**Loading documents.** Put PDFs in `data/policies/`, then:
+
+```bash
+uv run python scripts/ingest_documents.py
+```
+
+This reads each page, splits it into overlapping ~1000-character chunks, embeds them
+with Gemini and stores them in pgvector. Re-running **replaces** the collection, so it
+is safe to run again after editing a PDF or adding another. `PGVector` creates the
+`vector` extension and its own tables on first use — those tables are deliberately not
+managed by Alembic.
+
+Embeddings are 1536-dimensional rather than the model's native 3072: pgvector's HNSW and
+IVFFlat indexes only support up to 2000 dimensions. **Changing the embedding model or
+dimension means re-running the ingest script** — old vectors become meaningless.
+
+Set `GEMINI_API_KEY` in `.env` (free from Google AI Studio). Free-tier quotas are counted
+**per model**, so a persistent `429` is often fixed by pointing `GEMINI_CHAT_MODEL` at a
+different one. Rate limits surface as `429` with a retry message; other agent failures as
+`502`. Note `gemini-2.5-flash` is closed to new API keys.
 
 > On Windows, if `fastapi dev` crashes with a `UnicodeEncodeError` from an emoji in its startup banner, set `PYTHONUTF8=1` in your environment (PowerShell: `$env:PYTHONUTF8 = "1"`).
 

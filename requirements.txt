@@ -12,24 +12,40 @@ annotated-types==0.8.0
     # via pydantic
 anyio==4.15.0
     # via
+    #   google-genai
     #   httpx
+    #   httpx2
+    #   langsmith
     #   starlette
     #   watchfiles
+asyncpg==0.31.0
+    # via langchain-postgres
 bcrypt==5.0.0
     # via travel-agent
 certifi==2026.7.22
     # via
     #   httpcore
     #   httpx
+    #   requests
     #   sentry-sdk
+cffi==2.1.1 ; platform_python_implementation != 'PyPy'
+    # via cryptography
+charset-normalizer==3.5.1
+    # via requests
 click==8.5.0
     # via
     #   rich-toolkit
     #   uvicorn
 colorama==0.4.6 ; sys_platform == 'win32'
     # via typer
+cryptography==50.0.1
+    # via google-auth
 detect-installer==0.2.1
     # via fastapi-cloud-cli
+distro==1.9.0
+    # via
+    #   google-genai
+    #   langsmith
 dnspython==2.8.0
     # via email-validator
 email-validator==2.3.0
@@ -46,28 +62,84 @@ fastar==0.12.0
     # via
     #   fastapi
     #   fastapi-cloud-cli
-greenlet==3.5.5 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
+filetype==1.2.0
+    # via langchain-google-genai
+google-auth==2.57.1
+    # via google-genai
+google-genai==2.22.0
+    # via langchain-google-genai
+greenlet==3.5.5
     # via sqlalchemy
 h11==0.16.0
     # via
     #   httpcore
+    #   httpcore2
     #   uvicorn
 httpcore==1.0.9
     # via httpx
+httpcore2==2.12.0 ; sys_platform != 'emscripten'
+    # via httpx2
 httptools==0.8.0
     # via uvicorn
 httpx==0.28.1
     # via
     #   fastapi
     #   fastapi-cloud-cli
+    #   google-genai
+    #   langchain-core
+    #   langgraph-sdk
     #   travel-agent
+httpx2==2.12.0
+    # via langsmith
+httpx2-jsfetch==1.0 ; sys_platform == 'emscripten'
+    # via httpx2
 idna==3.19
     # via
     #   anyio
     #   email-validator
     #   httpx
+    #   httpx2
+    #   requests
 jinja2==3.1.6
     # via fastapi
+jsonpatch==1.33
+    # via langchain-core
+jsonpointer==3.1.1
+    # via jsonpatch
+langchain-core==1.6.2
+    # via
+    #   langchain-google-genai
+    #   langchain-postgres
+    #   langchain-text-splitters
+    #   langgraph
+    #   langgraph-checkpoint
+    #   langgraph-prebuilt
+    #   langgraph-sdk
+langchain-google-genai==4.4.0
+    # via travel-agent
+langchain-postgres==0.0.17
+    # via travel-agent
+langchain-protocol==0.0.19
+    # via
+    #   langchain-core
+    #   langgraph-sdk
+langchain-text-splitters==1.1.2
+    # via travel-agent
+langgraph==1.2.11
+    # via travel-agent
+langgraph-checkpoint==4.2.0
+    # via
+    #   langgraph
+    #   langgraph-checkpoint-postgres
+    #   langgraph-prebuilt
+langgraph-checkpoint-postgres==3.1.2
+    # via travel-agent
+langgraph-prebuilt==1.1.0
+    # via langgraph
+langgraph-sdk==0.4.4
+    # via langgraph
+langsmith==0.12.2
+    # via langchain-core
 mako==1.4.1
     # via alembic
 markdown-it-py==4.2.0
@@ -78,14 +150,49 @@ markupsafe==3.0.3
     #   mako
 mdurl==0.1.2
     # via markdown-it-py
+numpy==2.5.3
+    # via
+    #   langchain-postgres
+    #   pgvector
+orjson==3.12.0
+    # via
+    #   langgraph-checkpoint-postgres
+    #   langgraph-sdk
+    #   langsmith
+ormsgpack==1.12.2
+    # via langgraph-checkpoint
+packaging==26.3
+    # via
+    #   langchain-core
+    #   langsmith
+pgvector==0.3.6
+    # via langchain-postgres
 psycopg==3.3.5
-    # via travel-agent
+    # via
+    #   langchain-postgres
+    #   langgraph-checkpoint-postgres
+    #   travel-agent
 psycopg-binary==3.3.5 ; implementation_name != 'pypy'
     # via psycopg
+psycopg-pool==3.3.1
+    # via
+    #   langchain-postgres
+    #   langgraph-checkpoint-postgres
+pyasn1==0.6.4
+    # via pyasn1-modules
+pyasn1-modules==0.4.2
+    # via google-auth
+pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
+    # via cffi
 pydantic==2.13.5
     # via
     #   fastapi
     #   fastapi-cloud-cli
+    #   google-genai
+    #   langchain-core
+    #   langchain-google-genai
+    #   langgraph
+    #   langsmith
     #   pydantic-extra-types
     #   pydantic-settings
 pydantic-core==2.46.5
@@ -100,6 +207,8 @@ pygments==2.21.0
     # via rich
 pyjwt==2.13.0
     # via travel-agent
+pypdf==6.18.0
+    # via travel-agent
 python-dotenv==1.2.3
     # via
     #   pydantic-settings
@@ -108,7 +217,17 @@ python-dotenv==1.2.3
 python-multipart==0.0.32
     # via fastapi
 pyyaml==6.0.3
-    # via uvicorn
+    # via
+    #   langchain-core
+    #   uvicorn
+requests==2.34.2
+    # via
+    #   google-auth
+    #   google-genai
+    #   langsmith
+    #   requests-toolbelt
+requests-toolbelt==1.0.0
+    # via langsmith
 rich==15.0.0
     # via
     #   rich-toolkit
@@ -123,14 +242,27 @@ sentry-sdk==2.68.1
     # via fastapi-cloud-cli
 shellingham==1.5.4
     # via typer
+sniffio==1.3.1
+    # via
+    #   google-genai
+    #   langsmith
 sqlalchemy==2.0.52
     # via
     #   alembic
+    #   langchain-postgres
     #   travel-agent
 starlette==1.6.0
     # via
     #   fastapi
     #   travel-agent
+tenacity==9.1.4
+    # via
+    #   google-genai
+    #   langchain-core
+truststore==0.10.4 ; sys_platform != 'emscripten'
+    # via
+    #   httpcore2
+    #   httpx2
 typer==0.27.2
     # via
     #   fastapi-cli
@@ -140,6 +272,11 @@ typing-extensions==4.16.0
     #   alembic
     #   anyio
     #   fastapi
+    #   google-genai
+    #   langchain-core
+    #   langchain-protocol
+    #   langsmith
+    #   psycopg-pool
     #   pydantic
     #   pydantic-core
     #   pydantic-extra-types
@@ -154,7 +291,13 @@ typing-inspection==0.4.4
 tzdata==2026.3 ; sys_platform == 'win32'
     # via psycopg
 urllib3==2.7.0
-    # via sentry-sdk
+    # via
+    #   requests
+    #   sentry-sdk
+uuid-utils==0.17.0
+    # via
+    #   langchain-core
+    #   langsmith
 uvicorn==0.52.4
     # via
     #   fastapi
@@ -165,5 +308,15 @@ uvloop==0.22.1 ; platform_python_implementation != 'PyPy' and sys_platform != 'c
     # via uvicorn
 watchfiles==1.2.0
     # via uvicorn
-websockets==17.1
-    # via uvicorn
+websockets==16.1.1
+    # via
+    #   google-genai
+    #   langgraph-sdk
+    #   langsmith
+    #   uvicorn
+xxhash==4.0.1
+    # via
+    #   langgraph
+    #   langsmith
+zstandard==0.25.0
+    # via langsmith

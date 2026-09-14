@@ -85,7 +85,7 @@ def test_response_reports_which_cities_were_resolved(client, stub_search, future
 
 def test_city_whitespace_is_normalised(client, stub_search, future_date):
     response = client.post(
-        "/buses/search", json=body(future_date, origin="  mumbai   central ")
+    "/buses/search", json=body(future_date, origin="  mumbai   central ")
     )
 
     assert response.status_code == 200
@@ -102,7 +102,7 @@ def test_past_departure_date_is_rejected(client, stub_search):
 
 def test_identical_origin_and_destination_is_rejected(client, stub_search, future_date):
     response = client.post(
-        "/buses/search", json=body(future_date, origin="Pune", destination="pune")
+    "/buses/search", json=body(future_date, origin="Pune", destination="pune")
     )
 
     assert response.status_code == 422
@@ -116,15 +116,14 @@ def test_blank_city_is_rejected(client, stub_search, future_date):
     assert stub_search == []
 
 
-def test_search_requires_authentication(stub_search, future_date):
+def test_search_requires_authentication(client, stub_search, future_date):
     """Without the auth override, the endpoint must reject the request."""
-    from fastapi.testclient import TestClient
-
+    from app.api.deps import get_current_user
     from app.main import app
 
-    app.dependency_overrides.clear()
-    with TestClient(app) as anonymous_client:
-        response = anonymous_client.post("/buses/search", json=body(future_date))
+    app.dependency_overrides.pop(get_current_user)
+
+    response = client.post("/buses/search", json=body(future_date))
 
     assert response.status_code == 401
     assert stub_search == []

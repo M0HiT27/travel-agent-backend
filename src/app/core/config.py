@@ -41,6 +41,36 @@ class Settings(BaseSettings):
     # parse.bot redbus.com scraper. This is a separate scraper from the hotel one.
     parsebot_redbus_scraper_id: str
 
+    # Gemini powers both the embeddings and the chat model for the RAG assistant.
+    # 1536 dimensions rather than the model's native 3072: pgvector's HNSW/IVFFlat
+    # indexes only support up to 2000, and this model truncates cleanly.
+    # Changing the model or the dimension means re-ingesting every document.
+    gemini_api_key: SecretStr | None = None
+    gemini_embedding_model: str = "models/gemini-embedding-001"
+    gemini_embedding_dimensions: int = 1536
+    # Pinned rather than an alias like "gemini-flash-latest", so a model change is a
+    # deliberate edit and not a surprise. gemini-2.5-flash is closed to new API keys.
+    # Free-tier request quotas are counted per model, so switching models is also the
+    # fastest way out of a 429. gemini-2.5-flash is closed to new API keys.
+    gemini_chat_model: str = "gemini-3.6-flash"
+
+    # Where ingested policy documents are stored and searched.
+    documents_dir: str = "data/policies"
+    vector_collection_name: str = "travel_policies"
+
+    # Browser origins allowed to call this API. Comma-separated in .env.
+    # These must be listed exactly: auth is cookie-based, and a browser refuses to send
+    # cookies cross-origin to a wildcard "*". Defaults cover the usual Vite and CRA
+    # dev servers; add the real domain before deploying.
+    cors_origins: str = (
+        "http://localhost:5173,http://127.0.0.1:5173,"
+        "http://localhost:3000,http://127.0.0.1:3000"
+    )
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
     @property
     def database_url(self) -> str:
         return (

@@ -22,6 +22,21 @@ config.set_main_option("sqlalchemy.url", get_settings().database_url)
 
 target_metadata = Base.metadata
 
+# Tables created and owned by libraries, not by our models: LangChain's vector store
+# (langchain_pg_*) and LangGraph's conversation memory (checkpoint*). Autogenerate does
+# not know about them, so without this filter every new migration proposes DROPPING
+# them — which would destroy the ingested documents and every saved conversation.
+_LIBRARY_TABLE_PREFIXES = ("langchain_pg_", "checkpoint")
+
+
+def include_object(object, name, type_, reflected, compare_to):
+    if type_ == "table" and name.startswith(_LIBRARY_TABLE_PREFIXES):
+        return False
+    # Indexes belonging to those tables are reported separately from the tables.
+    if type_ == "index" and object.table.name.startswith(_LIBRARY_TABLE_PREFIXES):
+        return False
+    return True
+
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
@@ -46,6 +61,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -67,7 +83,9 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            include_object=include_object,
         )
 
         with context.begin_transaction():

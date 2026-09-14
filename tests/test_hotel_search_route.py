@@ -83,7 +83,7 @@ def test_response_reports_which_destination_was_resolved(client, stub_search, fu
 def test_destination_whitespace_is_normalised(client, stub_search, future_dates):
     start, end = future_dates
     response = client.post(
-        "/hotels/search", json=body(start, end, destination="  new    york ")
+    "/hotels/search", json=body(start, end, destination="  new    york ")
     )
 
     assert response.status_code == 200
@@ -152,16 +152,15 @@ def test_room_and_guest_counts_outside_range_are_rejected(
     assert stub_search == []
 
 
-def test_search_requires_authentication(stub_search, future_dates):
+def test_search_requires_authentication(client, stub_search, future_dates):
     """Without the auth override, the endpoint must reject the request."""
-    from fastapi.testclient import TestClient
-
+    from app.api.deps import get_current_user
     from app.main import app
 
     start, end = future_dates
-    app.dependency_overrides.clear()
-    with TestClient(app) as anonymous_client:
-        response = anonymous_client.post("/hotels/search", json=body(start, end))
+    app.dependency_overrides.pop(get_current_user)
+
+    response = client.post("/hotels/search", json=body(start, end))
 
     assert response.status_code == 401
     assert stub_search == []
