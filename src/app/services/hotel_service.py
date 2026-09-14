@@ -17,11 +17,10 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-import httpx
-
 from app.core.config import Settings
-from app.core.exceptions import NotFoundError, UpstreamError, UpstreamTimeoutError
+from app.core.exceptions import NotFoundError
 from app.schemas.hotel import Hotel, HotelSearchRequest, HotelSearchResponse
+from app.services._parsebot import call_parsebot
 
 logger = logging.getLogger(__name__)
 
@@ -135,48 +134,14 @@ def _build_query_params(
 async def _call_parsebot(
     settings: Settings, operation: str, params: dict[str, str]
 ) -> Any:
-    """GET one scraper operation. Both operations share this envelope and error path."""
-    if (
-        settings.parsebot_api_key is None
-        or not settings.parsebot_api_key.get_secret_value().strip()
-    ):
-        raise UpstreamError("Hotel search is not configured (PARSEBOT_API_KEY is missing).")
-
-    url = (
-        f"{settings.parsebot_api_url.rstrip('/')}"
-        f"/scraper/{settings.parsebot_hotel_scraper_id}/{operation}"
+    """GET one hotels.com scraper operation. Both operations share this envelope."""
+    return await call_parsebot(
+        settings,
+        settings.parsebot_hotel_scraper_id,
+        operation,
+        params,
+        label="Hotel search",
     )
-    headers = {
-        "x-api-key": settings.parsebot_api_key.get_secret_value(),
-        "Accept": "application/json",
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=settings.parsebot_timeout_seconds) as client:
-            response = await client.get(url, params=params, headers=headers)
-    except httpx.TimeoutException as exc:
-        raise UpstreamTimeoutError("Hotel search timed out. Please try again.") from exc
-    except httpx.RequestError as exc:
-        logger.warning("parse.bot request failed: %s", type(exc).__name__)
-        raise UpstreamError("Hotel search is temporarily unavailable.") from exc
-
-    if response.is_error:
-        # Status only. The body is not logged because our API key travels in a header
-        # and some error paths echo request headers back.
-        logger.warning("parse.bot %s returned HTTP %s", operation, response.status_code)
-        raise UpstreamError("Hotel search is temporarily unavailable.")
-
-    try:
-        payload = response.json()
-    except ValueError as exc:
-        raise UpstreamError("Hotel search returned an unreadable response.") from exc
-
-    # A scrape can fail with HTTP 200 and status "error" in the envelope.
-    if isinstance(payload, dict) and payload.get("status") not in (None, "success"):
-        logger.warning("parse.bot %s reported status %r", operation, payload.get("status"))
-        raise UpstreamError("Hotel search is temporarily unavailable.")
-
-    return payload
 
 
 # --------------------------------------------------------------------------------------
