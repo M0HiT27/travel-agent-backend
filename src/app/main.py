@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 
-from app.api.routes import auth, buses, flights, health, hotels
+from app.api.routes import auth, buses, chat, flights, health, hotels
 from app.core.config import get_settings
 from app.core.exception_handlers import (
     app_error_handler,
@@ -23,6 +23,7 @@ app.include_router(auth.router)
 app.include_router(flights.router)
 app.include_router(hotels.router)
 app.include_router(buses.router)
+app.include_router(chat.router)
 
 
 def main() -> None:

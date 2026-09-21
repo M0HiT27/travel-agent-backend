@@ -41,6 +41,18 @@ class Settings(BaseSettings):
     # parse.bot redbus.com scraper. This is a separate scraper from the hotel one.
     parsebot_redbus_scraper_id: str
 
+    # Chat LLM, provider-agnostic: llm_provider picks which of the below is used at
+    # runtime (see app/llm/factory.py). Embeddings are Gemini-only regardless of this
+    # setting -- Groq does not serve an embeddings endpoint.
+    llm_provider: str = "gemini"
+
+    google_api_key: SecretStr | None = None
+    gemini_chat_model: str = "gemini-2.5-flash"
+    gemini_embedding_model: str = "models/text-embedding-004"
+
+    groq_api_key: SecretStr | None = None
+    groq_chat_model: str = "llama-3.3-70b-versatile"
+
     @property
     def database_url(self) -> str:
         return (

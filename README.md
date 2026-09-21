@@ -9,6 +9,8 @@ FastAPI backend with SQLAlchemy + Alembic, backed by PostgreSQL (run locally).
 - Alembic for migrations
 - Pydantic Settings for config (`.env`)
 - PyJWT + bcrypt for cookie-based auth
+- LangGraph + LangChain for the chatbot, model-agnostic (Gemini or Groq today)
+- pgvector for RAG (policy Q&A)
 
 ## Project layout
 
@@ -29,8 +31,18 @@ src/app/
   services/hotel_service.py               # parse.bot hotel search: resolve -> build -> call -> map
   services/bus_service.py                  # parse.bot bus search: resolve -> build -> call -> map
   services/_parsebot.py                     # shared parse.bot HTTP client (hotels + buses)
+  services/chat_service.py                   # loads history, runs the agent, persists the turn, streams SSE
+  llm/factory.py                               # get_chat_model(settings) -> BaseChatModel (gemini | groq)
+  llm/embeddings.py                             # get_embeddings(settings) -- Gemini only, Groq has none
+  vectorstores/pgvector_store.py                 # add_chunks / search over document_chunks, scoped by domain
+  ingestion/pdf_loader.py                          # CLI: chunk + embed + store a policy PDF for one domain
+  tools/bus_search_tool.py                          # LangChain tool wrapping bus_service.search_buses
+  tools/bus_policy_tool.py                           # LangChain tool: pgvector search pinned to domain="bus"
+  graphs/travel_chat.py                               # builds the LangGraph agent from the current tool list
+  repositories/conversation_repository.py               # conversation CRUD, scoped to the owning user
+  repositories/message_repository.py                     # message history for a conversation
 alembic/                                  # migrations (env.py wired to Settings + Base.metadata)
-tests/                                     # pytest suite (no network or DB required)
+tests/                                     # pytest suite (no network, API key or live DB required)
 ```
 
 ## Setup
@@ -45,6 +57,12 @@ Create the database (Postgres must already be running locally):
 ```bash
 createdb travel_agent
 ```
+
+The chat feature's RAG needs the [pgvector](https://github.com/pgvector/pgvector)
+extension installed on that Postgres server (`CREATE EXTENSION` is run for you by
+the migration below, but the extension binary itself has to already be available --
+e.g. `apt install postgresql-16-pgvector`, `brew install pgvector`, or use a Postgres
+image that bundles it).
 
 ## Run
 
@@ -157,6 +175,42 @@ flights and hotels (`test_bus_service.py`'s payloads are trimmed copies of it) �
 notably, both `get_city_suggestions` and `search_buses` wrap their payload in a `data`
 envelope, and `ID`/`routeId`/`operatorId` arrive as integers, not strings.
 
+### Chat
+
+- `POST /chat/` — `{conversation_id?, message}` → streams the assistant's reply as Server-Sent Events (`event: token`/`tool_start`/`tool_end`/`done`/`error`). Omit `conversation_id` to start a new conversation; the first event is always `event: conversation` with its id. Requires the auth cookie.
+
+```bash
+curl -N -X POST http://127.0.0.1:8000/chat/ \
+  -H 'Content-Type: application/json' \
+  -b 'access_token=<your cookie>' \
+  -d '{"message": "buses from Mumbai to Pune tomorrow"}'
+```
+
+The agent is a LangGraph tool-calling loop (`graphs/travel_chat.py`) bound to two
+tools right now: `search_buses` (wraps `bus_service.search_buses` directly -- no
+HTTP round-trip back into this API) and `search_bus_policy` (RAG over the ingested
+bus policy PDF, via pgvector). **Model-agnostic by design**: everything downstream of
+`llm/factory.get_chat_model()` only ever sees LangChain's `BaseChatModel` interface,
+never `ChatGoogleGenerativeAI`/`ChatGroq` directly -- switching is `LLM_PROVIDER=gemini`
+or `LLM_PROVIDER=groq` in `.env`, nothing else changes. Embeddings are always Gemini
+regardless of that setting, since Groq has no embeddings endpoint.
+
+**Adding your own domain** (e.g. hotel or flight policy/search) means: write your own
+`tools/<domain>_search_tool.py` / `tools/<domain>_policy_tool.py` following the bus
+ones, ingest your own PDF tagged with your own `--domain`, and append your two tools
+to the list in `graphs/travel_chat.py`. Everything else -- the route, `chat_service`,
+conversation/message persistence, the LLM factory -- is shared and untouched.
+
+**RAG setup** (one-time, per environment):
+```bash
+# pgvector extension must be installed on your Postgres before running migrations
+uv run alembic upgrade head
+uv run python -m app.ingestion.pdf_loader --domain bus --file policy_docs/bus_policy.pdf
+```
+`policy_docs/bus_policy.pdf` is a placeholder fictional policy (cancellations,
+refunds, luggage, boarding, etc.) for exercising the pipeline end to end -- swap it
+for a real one whenever you have it, under the same `--domain bus`.
+
 > On Windows, if `fastapi dev` crashes with a `UnicodeEncodeError` from an emoji in its startup banner, set `PYTHONUTF8=1` in your environment (PowerShell: `$env:PYTHONUTF8 = "1"`).
 
 ## Tests
@@ -165,8 +219,12 @@ envelope, and `ID`/`routeId`/`operatorId` arrive as integers, not strings.
 uv run pytest
 ```
 
-No network, API key, or database is needed: route tests stub out `search_flights`, and the
-Duffel mapping is tested against a recorded response payload.
+No network, API key, or live Postgres is needed. Route tests stub out the service
+layer (`search_flights`, `search_hotels`, `search_buses`, `stream_chat`); mapping
+functions are tested against recorded/real response payloads; chat's repositories
+and `resolve_conversation` run against an in-memory SQLite database (the
+Postgres-only `document_chunks` table is excluded there and covered separately by
+stubbing the vector store in `test_bus_policy_tool.py`).
 
 ## Migrations
 
