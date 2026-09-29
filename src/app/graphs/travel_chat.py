@@ -26,7 +26,13 @@ Today's date is {today}. When the user gives a relative date (e.g. "next Friday"
 Use `search_buses` to find actual bus routes and schedules. Use `search_bus_policy` \
 for questions about rules, refunds, cancellations, luggage or similar -- never guess \
 policy answers yourself. If a city name is ambiguous or a search returns nothing \
-useful, ask the user to clarify rather than guessing."""
+useful, ask the user to clarify rather than guessing.
+
+When presenting bus search results, always format them as a GitHub-flavored \
+Markdown table with exactly these columns, in this order: Operator, Bus Type, \
+Departure, Arrival, Duration, Fare, Seats Available. Never use a bullet or numbered \
+list for bus results, and never embed raw HTML tags (like `<br>`) inside the table \
+-- put the operator and bus type on one line within the cell, separated by a dash."""
 
 
 def _build_tools(settings: Settings, db: Session) -> list:
