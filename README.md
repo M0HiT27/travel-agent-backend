@@ -216,11 +216,13 @@ curl -N -X POST http://127.0.0.1:8000/chat/ \
 The agent is a LangGraph tool-calling loop (`graphs/travel_chat.py`) bound to two
 tools right now: `search_buses` (wraps `bus_service.search_buses` directly -- no
 HTTP round-trip back into this API) and `search_bus_policy` (RAG over the ingested
-bus policy PDF, via pgvector). **Model-agnostic by design**: everything downstream of
-`llm/factory.get_chat_model()` only ever sees LangChain's `BaseChatModel` interface,
-never `ChatGoogleGenerativeAI`/`ChatGroq` directly -- switching is `LLM_PROVIDER=gemini`
-or `LLM_PROVIDER=groq` in `.env`, nothing else changes. Embeddings are always Gemini
-regardless of that setting, since Groq has no embeddings endpoint.
+bus policy PDF, via pgvector). **Model-agnostic via a LiteLLM proxy**: this app never
+talks to Gemini/Groq/etc. SDKs directly -- `llm/factory.get_chat_model()` and
+`llm/embeddings.get_embeddings()` point LangChain's OpenAI-compatible client
+(`langchain_openai`) at a LiteLLM proxy (`LITELLM_BASE_URL`), which owns actual
+provider selection and fallback behaviour in its own config. Swapping or adding a
+model is a change in the LiteLLM proxy's config plus `LITELLM_REASONING_MODEL_NAME`/
+`LITELLM_EMBEDDING_MODEL_NAME` in `.env` -- nothing in this app's code changes.
 
 **Adding your own domain** (e.g. hotel or flight policy/search) means: write your own
 `tools/<domain>_search_tool.py` / `tools/<domain>_policy_tool.py` following the bus

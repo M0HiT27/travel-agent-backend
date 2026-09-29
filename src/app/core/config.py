@@ -49,9 +49,10 @@ class Settings(BaseSettings):
     # parse.bot redbus.com scraper. This is a separate scraper from the hotel one.
     parsebot_redbus_scraper_id: str
 
-    # Chat LLM, provider-agnostic: llm_provider picks which of the below is used at
-    # runtime (see app/llm/factory.py). Embeddings are Gemini-only regardless of this
-    # setting -- Groq does not serve an embeddings endpoint.
+    # SUPERSEDED by the LiteLLM settings below -- chat now goes through a LiteLLM
+    # proxy instead of calling a provider SDK directly, so `app/llm/factory.py` and
+    # `app/llm/embeddings.py` no longer read these. Left in place (unused) rather
+    # than deleted so this is an easy revert if needed; not read by any code path.
     llm_provider: str = "gemini"
 
     google_api_key: SecretStr | None = None
@@ -60,6 +61,16 @@ class Settings(BaseSettings):
 
     groq_api_key: SecretStr | None = None
     groq_chat_model: str = "llama-3.3-70b-versatile"
+
+    # Chat + embeddings both go through a local LiteLLM proxy (OpenAI-compatible),
+    # which owns provider selection and fallback behaviour on its own side -- this
+    # app just points an OpenAI-style client at it. `litellm_reasoning_model_name`
+    # and `litellm_embedding_model_name` are whatever aliases are registered in the
+    # proxy's own config, not a provider's raw model name.
+    litellm_base_url: str = "http://localhost:4000"
+    litellm_api_key: SecretStr | None = None
+    litellm_reasoning_model_name: str = "reasoning-model"
+    litellm_embedding_model_name: str = "embedding-model"
 
     @property
     def database_url(self) -> str:
