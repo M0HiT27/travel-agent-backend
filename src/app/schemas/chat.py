@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -13,5 +15,12 @@ class ChatRequest(BaseModel):
 
 
 class ChatMessageOut(BaseModel):
+    id: int
     role: str
     content: str
+    created_at: datetime
+
+
+class ConversationOut(BaseModel):
+    id: int
+    title: str | None

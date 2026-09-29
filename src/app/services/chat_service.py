@@ -30,12 +30,51 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
-def resolve_conversation(db: Session, user: User, conversation_id: int | None) -> Conversation:
+def _extract_text(content: object) -> str:
+    """Normalize a LangChain message chunk's `.content` to plain text.
+
+    Gemini (and other providers) sometimes stream content as a list of part
+    dicts (e.g. `[{"type": "text", "text": "..."}]`) instead of a plain
+    string -- notably once a tool call is involved in the same turn.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict) and isinstance(item.get("text"), str):
+                parts.append(item["text"])
+        return "".join(parts)
+    return ""
+
+
+_TITLE_MAX_LENGTH = 60
+
+
+def _make_title(message: str) -> str:
+    """Derive a short conversation title from its first message.
+
+    A plain truncation rather than an LLM call: it's free, instant, and good
+    enough for a sidebar label. Callers are always free to rename later.
+    """
+    collapsed = " ".join(message.split())
+    if len(collapsed) <= _TITLE_MAX_LENGTH:
+        return collapsed
+    return collapsed[:_TITLE_MAX_LENGTH].rstrip() + "..."
+
+
+def resolve_conversation(
+    db: Session, user: User, conversation_id: int | None, message: str
+) -> Conversation:
     """Look up or create the conversation. Called from the route, before the
     streaming response starts -- once streaming begins, the HTTP status is already
     committed and a raised NotFoundError can no longer become a real 404."""
     if conversation_id is None:
-        conversation = conversation_repository.create(db, user_id=user.id)
+        conversation = conversation_repository.create(
+            db, user_id=user.id, title=_make_title(message)
+        )
         db.commit()
         return conversation
 
@@ -58,7 +97,7 @@ async def stream_chat(
     message_repository.add(db, conversation.id, "user", request.message)
     db.commit()
 
-    yield _sse("conversation", {"conversation_id": conversation.id})
+    yield _sse("conversation", {"conversation_id": conversation.id, "title": conversation.title})
 
     agent = build_agent(settings, db)
     messages = [*langchain_history, HumanMessage(content=request.message)]
@@ -71,9 +110,10 @@ async def stream_chat(
             if kind == "on_chat_model_stream":
                 chunk = event["data"].get("chunk")
                 content = getattr(chunk, "content", None) if chunk is not None else None
-                if content:
-                    final_answer_parts.append(content)
-                    yield _sse("token", {"content": content})
+                text = _extract_text(content)
+                if text:
+                    final_answer_parts.append(text)
+                    yield _sse("token", {"content": text})
 
             elif kind == "on_tool_start":
                 yield _sse(

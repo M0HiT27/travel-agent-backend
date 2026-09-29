@@ -85,6 +85,15 @@ uv run fastapi dev src/app/main.py
 
 The JWT is signed server-side and set as an `httponly` cookie (`COOKIE_NAME` in `.env`) — it's never exposed to client-side JS. Errors are returned as consistent JSON (`{"detail": "..."}`); unhandled server errors are logged but never leak internals to the client.
 
+Since the session lives in a cookie, a frontend on a different origin (any local
+React dev server) must send requests **with credentials**
+(`fetch(url, { credentials: "include" })` / `axios.defaults.withCredentials = true`),
+and its origin must be in `CORS_ALLOWED_ORIGINS` in `.env` (defaults cover
+`http://localhost:5173` and `http://localhost:3000`; add yours if it differs).
+`allow_credentials=True` is why `CORSMiddleware` can't use `allow_origins=["*"]` —
+browsers reject that combination — so this must be an explicit origin list, not a
+wildcard.
+
 ### Flights
 
 - `POST /flights/search` — `{origin, destination, departure_date, adults?}` → offers sorted cheapest first. Requires the auth cookie, since every search costs money against the Duffel account.
@@ -177,7 +186,25 @@ envelope, and `ID`/`routeId`/`operatorId` arrive as integers, not strings.
 
 ### Chat
 
-- `POST /chat/` — `{conversation_id?, message}` → streams the assistant's reply as Server-Sent Events (`event: token`/`tool_start`/`tool_end`/`done`/`error`). Omit `conversation_id` to start a new conversation; the first event is always `event: conversation` with its id. Requires the auth cookie.
+- `GET /chat/conversations` — the current user's conversations as `[{id, title}, ...]`, most recent first. For populating a sidebar. Requires the auth cookie.
+
+```bash
+curl http://127.0.0.1:8000/chat/conversations \
+  -b 'access_token=<your cookie>'
+```
+
+- `GET /chat/conversations/{conversation_id}/messages` — that conversation's messages in order, as `[{id, role, content, created_at}, ...]`. 404s if the conversation doesn't exist or belongs to someone else. For reopening a conversation in the UI.
+
+```bash
+curl http://127.0.0.1:8000/chat/conversations/1/messages \
+  -b 'access_token=<your cookie>'
+```
+
+- `POST /chat/` — `{conversation_id?, message}` → streams the assistant's reply as Server-Sent Events (`event: token`/`tool_start`/`tool_end`/`done`/`error`). Omit `conversation_id` to start a new conversation; the first event is always `event: conversation` with its id and `title`. Requires the auth cookie.
+
+A new conversation's `title` is derived from its first message (whitespace-collapsed,
+truncated to 60 chars) -- no extra LLM call, just enough for a sidebar label. An
+existing conversation's `title` is unchanged by later messages.
 
 ```bash
 curl -N -X POST http://127.0.0.1:8000/chat/ \

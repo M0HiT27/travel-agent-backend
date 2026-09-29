@@ -92,3 +92,83 @@ def test_chat_requires_authentication(stub_stream_chat):
 
     assert response.status_code == 401
     assert stub_stream_chat == []
+
+
+def test_list_conversations_returns_only_the_current_users_conversations(chat_client, db_session):
+    from app.repositories import conversation_repository
+
+    mine = conversation_repository.create(db_session, user_id=1, title="mine")
+    conversation_repository.create(db_session, user_id=2, title="not mine")
+    db_session.commit()
+
+    response = chat_client.get("/chat/conversations")
+
+    assert response.status_code == 200
+    assert response.json() == [{"id": mine.id, "title": "mine"}]
+
+
+def test_list_conversations_is_empty_when_user_has_none(chat_client):
+    response = chat_client.get("/chat/conversations")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_conversations_requires_authentication():
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    app.dependency_overrides.clear()
+    with TestClient(app) as anonymous_client:
+        response = anonymous_client.get("/chat/conversations")
+
+    assert response.status_code == 401
+
+
+def test_list_messages_returns_them_in_order(chat_client, db_session):
+    from app.repositories import conversation_repository, message_repository
+
+    conversation = conversation_repository.create(db_session, user_id=1, title="mine")
+    message_repository.add(db_session, conversation.id, "user", "hi")
+    message_repository.add(db_session, conversation.id, "assistant", "hello there")
+    db_session.commit()
+
+    response = chat_client.get(f"/chat/conversations/{conversation.id}/messages")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [(m["role"], m["content"]) for m in body] == [
+        ("user", "hi"),
+        ("assistant", "hello there"),
+    ]
+    assert all("id" in m and "created_at" in m for m in body)
+
+
+def test_list_messages_404s_for_missing_conversation(chat_client):
+    response = chat_client.get("/chat/conversations/999/messages")
+
+    assert response.status_code == 404
+
+
+def test_list_messages_404s_for_another_users_conversation(chat_client, db_session):
+    from app.repositories import conversation_repository
+
+    other = conversation_repository.create(db_session, user_id=2, title="not mine")
+    db_session.commit()
+
+    response = chat_client.get(f"/chat/conversations/{other.id}/messages")
+
+    assert response.status_code == 404
+
+
+def test_list_messages_requires_authentication():
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    app.dependency_overrides.clear()
+    with TestClient(app) as anonymous_client:
+        response = anonymous_client.get("/chat/conversations/1/messages")
+
+    assert response.status_code == 401

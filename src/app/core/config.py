@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     cookie_samesite: str = "lax"
 
+    # Comma-separated origins allowed to call this API with credentials (cookies).
+    # Defaults cover the common React dev servers (Vite, CRA/Next).
+    cors_allowed_origins: str = "http://localhost:5173,http://localhost:3000"
+
+    @property
+    def cors_allowed_origins_list(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
+
     # Duffel flight search. SecretStr keeps the key out of logs and error dumps.
     duffel_api_key: SecretStr | None = None
     duffel_api_url: str = "https://api.duffel.com"
